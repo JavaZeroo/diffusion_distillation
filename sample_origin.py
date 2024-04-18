@@ -32,29 +32,14 @@ def save2db(traj_batch, env, curr):
 def load_teacher(args, config):
     # Create teacher model.
     teacher = diffusion_distillation.model.Model(config)
-
-    # Load the teacher params.
-    cache_dir = os.path.join(os.environ["HOME"], ".cache/flax_diffusion")
-    os.makedirs(cache_dir, exist_ok=True)
-    if args.ckpt_path.startswith('gs://'):
-        local_teacher_path = os.path.join(
-            cache_dir, os.path.basename(args.ckpt_path))
-        if not os.path.isfile(local_teacher_path) and args.dist.rank == 0:
-            tf.io.gfile.copy(args.ckpt_path, local_teacher_path)
-        while not os.path.isfile(local_teacher_path):
-            # Wait for the master to copy the file.
-            print('Rank', args.dist.rank, 'waiting for teacher params to download to',
-                  local_teacher_path, '...')
-            time.sleep(1)
-    else:
-        local_teacher_path = args.ckpt_path
-    teacher.load_teacher_state(local_teacher_path)
+    print(print(teacher.model))
+    teacher.load_teacher_state("/tmp/flax_ckpt/checkpoint/mnist_base_x")
 
     return teacher
 
 
 def evaluate_teacher(args):
-    config = diffusion_distillation.config.cifar_distill.get_config()
+    config = diffusion_distillation.config.mnist_distill.get_config()
     teacher = load_teacher(args, config)
     teacher.teacher_state = flax.jax_utils.replicate(teacher.teacher_state)
 
@@ -72,6 +57,7 @@ def evaluate_teacher(args):
 
     def ddim_step_fn(teacher_params, xt, y, t, s):
         logsnr_t = logsnr_schedule_fn(t)
+
         xhat = teacher_fn(
             params=teacher_params,
             xt=xt,
@@ -89,19 +75,23 @@ def evaluate_teacher(args):
         logsnr_s = bc(logsnr_s, xt.shape)
         alpha_s = jnp.sqrt(nn.sigmoid(logsnr_s))
         sigma_s = jnp.sqrt(nn.sigmoid(-logsnr_s))
+        print(alpha_s.shape, xhat.shape, sigma_s.shape, epshat.shape)
         xt = alpha_s * xhat + sigma_s * epshat
         return xhat, xt
 
     ddim_step_fn_p = jax.pmap(ddim_step_fn, axis_name='batch')
-    assert teacher.config.model.mean_type == 'x'
+    # assert teacher.config.model.mean_type == 'x'
 
     def sample_ddim(rng, teacher_params, z, y, num_steps, t_idx):
         dt = 1. / num_steps
         xt = z
         x_list = [xt]
         for i, timestep in enumerate(jnp.linspace(1., dt, num_steps)):
+            print(f"======================{i}======================")
             t = jnp.full(z.shape[:2], fill_value=timestep, dtype=jnp.float32)
             s = t - dt
+            print(type(xt), type(t), type(s))
+            print(xt.shape, t.shape, s.shape)
             xhat, xt = ddim_step_fn_p(teacher_params, xt, y, t, s)
             if i in t_idx:
                 x_list.append(xhat)
@@ -115,7 +105,7 @@ def evaluate_teacher(args):
 
     num_batches = N // B - args.startbatch
     sample_key = jax.random.PRNGKey(123)
-    z1_shape = (32, 32, 3)
+    z1_shape = (28, 28, 1)
     num_steps = args.num_steps
     curr = B * args.startbatch
     db_path = os.path.join(args.db_path, args.time, 'lmdb')
@@ -169,8 +159,8 @@ if __name__ == '__main__':
     parser.add_argument('--ckpt_path', type=str, default='ckpts/cifar_original')
     parser.add_argument('--time', type=str, default='uniform')
     parser.add_argument('--num_steps', type=int, default=512)
-    parser.add_argument('--num_imgs', type=int, default=16_000)
-    parser.add_argument('--batchsize', type=int, default=1000)
+    parser.add_argument('--num_imgs', type=int, default=10000)
+    parser.add_argument('--batchsize', type=int, default=500)
     parser.add_argument('--startbatch', type=int, default=0, help='the batch id to start from')
     args = parser.parse_args()
     evaluate_teacher(args)

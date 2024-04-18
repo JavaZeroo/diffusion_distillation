@@ -22,7 +22,7 @@ import ml_collections
 end_num_steps = 1  # eventual number of steps in the sampler
 start_num_steps = 8192  # number of steps in baseline sampler
 distill_steps_per_iter = 50000
-teacher_ckpt_path = 'checkpoint/'  # checkpoints to be released later
+teacher_ckpt_path = '/tmp/flax_ckpt/checkpoint/checkpoint_9'  # checkpoints to be released later
 
 
 def D(**kwargs):
@@ -52,8 +52,8 @@ def get_config():
           # architecture, same as teacher but with 0 dropout!
           name='unet_iddpm',
           args=D(
-              ch=256,
-              emb_ch=1024,  # default is ch * 4
+              ch=64,
+              emb_ch=256,  # default is ch * 4
               ch_mult=[1, 1, 1],
               num_res_blocks=3,
               attn_resolutions=[8, 16],
@@ -62,7 +62,7 @@ def get_config():
               logsnr_input_type='inv_cos',
               resblock_resample=True,
           ),
-          mean_type='both',  # eps, x, both, v
+          mean_type='x',  # eps, x, both, v
           logvar_type='fixed_large',
           mean_loss_weight_type='snr_trunc',  # constant, snr, snr_trunc
 

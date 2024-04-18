@@ -274,7 +274,6 @@ class UNet(nn.Module):
         h = self._upsample(
             h, name=f'up_{i_level}.upsample', emb=emb, train=train)
     assert not hs
-
     # End
     h = nonlinearity(Normalize(name='norm_out')(h))
     h = nn.Conv(

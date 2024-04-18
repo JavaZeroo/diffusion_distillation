@@ -92,7 +92,7 @@ def evaluate_teacher(args):
         return xhat, xt
 
     ddim_step_fn_p = jax.pmap(ddim_step_fn, axis_name='batch')
-    assert teacher.config.model.mean_type == 'x'
+    # assert teacher.config.model.mean_type == 'x'
 
     def sample_ddim(rng, teacher_params, z, y, num_steps):
         dt = 1. / num_steps
