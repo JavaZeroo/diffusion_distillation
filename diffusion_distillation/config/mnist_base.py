@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The Google Research Authors.
+# Copyright 2024 The Google Research Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,11 +13,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""CIFAR, continuous/discrete time DDPM architecture and schedule."""
+"""CIFAR distillation."""
 
 # pylint: disable=invalid-name,line-too-long
 
 import ml_collections
+
+end_num_steps = 1  # eventual number of steps in the sampler
+start_num_steps = 8192  # number of steps in baseline sampler
+distill_steps_per_iter = 50000
+teacher_ckpt_path = 'gs://gresearch/diffusion-distillation/cifar_original'  # checkpoints to be released later
 
 
 def D(**kwargs):
@@ -25,10 +30,18 @@ def D(**kwargs):
 
 
 def get_config():
-  return D(
+  config = D(
+      distillation=D(
+          # teacher checkpoint is used for teacher and initial params of student
+          teacher_checkpoint_path=teacher_ckpt_path,
+          steps_per_iter = distill_steps_per_iter,  # number of distillation training steps per halving of sampler steps
+          only_finetune_temb = False,
+          start_num_steps = start_num_steps,
+          end_num_steps = end_num_steps,
+      ),
       seed=0,
       dataset=D(
-          name='CIFAR10',
+          name='MNIST',
           args=D(
               class_conditional=False,
               randflip=True,
@@ -36,7 +49,7 @@ def get_config():
       ),
       sampler='ddim',
       model=D(
-          # architecture
+          # architecture, same as teacher but with 0 dropout!
           name='unet_iddpm',
           args=D(
               ch=256,
@@ -45,17 +58,17 @@ def get_config():
               num_res_blocks=3,
               attn_resolutions=[8, 16],
               num_heads=1,
-              dropout=0.2,
+              dropout=0.,
               logsnr_input_type='inv_cos',
               resblock_resample=True,
           ),
           mean_type='x',  # eps, x, both, v
           logvar_type='fixed_large',
-          mean_loss_weight_type='snr_trunc',  # constant, snr, snr_trunc, v_mse
+          mean_loss_weight_type='snr_trunc',  # constant, snr, snr_trunc
 
           # logsnr schedule
-          train_num_steps=0,  # train in continuous time
-          eval_sampling_num_steps=1024,
+          train_num_steps=end_num_steps,
+          eval_sampling_num_steps=end_num_steps,
           train_logsnr_schedule=D(name='cosine',
                                   logsnr_min=-20., logsnr_max=20.),
           eval_logsnr_schedule=D(name='cosine',
@@ -66,9 +79,11 @@ def get_config():
           # optimizer
           batch_size=128,
           optimizer='adam',
-          learning_rate=2e-4,
-          learning_rate_warmup_steps=1000,
-          weight_decay=0.001,
+          learning_rate=5e-5,
+          learning_rate_warmup_steps=0,
+          learning_rate_anneal_type='linear',
+          learning_rate_anneal_steps=distill_steps_per_iter,
+          weight_decay=0.,
           ema_decay=0.,
           grad_clip=1.0,
           substeps=10,
@@ -79,3 +94,11 @@ def get_config():
           eval_every_steps=10000,
       ),
   )
+
+  if hasattr(config, 'distillation'):
+    # run some sanity checks on inputs
+    assert config.distillation.start_num_steps > 0
+    assert config.distillation.end_num_steps > 0
+    assert config.distillation.start_num_steps % config.distillation.end_num_steps == 0
+
+  return config

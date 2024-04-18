@@ -27,8 +27,7 @@ import re
 import time
 from absl import logging
 from flax import serialization
-from tensorflow.compat.v2.io import gfile
-
+import pickle
 
 # Single-group reg-exps for int or float numerical substrings.
 # captures sign:
@@ -94,25 +93,9 @@ def save_checkpoint(ckpt_dir,
   logging.info('Saving checkpoint at step: %s', step)
   ckpt_tmp_path = _checkpoint_path(ckpt_dir, 'tmp', prefix)
   ckpt_path = _checkpoint_path(ckpt_dir, step, prefix)
-  gfile.makedirs(os.path.dirname(ckpt_path))
 
-  logging.info('Writing to temporary checkpoint location: %s', ckpt_tmp_path)
-  with gfile.GFile(ckpt_tmp_path, 'wb') as fp:
-    fp.write(serialization.to_bytes(target))
-
-  # Rename once serialization and writing finished.
-  gfile.rename(ckpt_tmp_path, ckpt_path, overwrite=overwrite)
-  logging.info('Saved checkpoint at %s', ckpt_path)
-
-  # Remove old checkpoint files.
-  base_path = os.path.join(ckpt_dir, f'{prefix}')
-  checkpoint_files = natural_sort(gfile.glob(base_path + '*'))
-  if len(checkpoint_files) > keep:
-    old_ckpts = checkpoint_files[:-keep]
-    for path in old_ckpts:
-      logging.info('Removing checkpoint at %s', path)
-      gfile.remove(path)
-
+  with open(ckpt_path, 'wb') as fp:
+    fp.write(pickle.dumps(target))
   return ckpt_path
 
 
@@ -134,7 +117,7 @@ def check_and_convert_gcs_filepath(filepath, raise_if_not_gcs=False):
       print('downloading file from GCS: ' + filepath)
       dir_index = local_filepath.rfind('/')
       os.system('mkdir -p ' + local_filepath[:dir_index])
-      os.system('gsutil cp ' + filepath + ' ' + local_filepath)
+      os.system('gsutil -o "Credentials:gs_json_host=127.0.0.1" -o "Credentials:gs_json_port=4443" -o "Boto:https_validate_certificates=False" cp ' + filepath + ' ' + local_filepath)
     return local_filepath
 
   else:

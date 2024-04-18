@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The Google Research Authors.
+# Copyright 2024 The Google Research Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@
 
 import functools
 from typing import Any, Dict, Union
+from flax.training import checkpoints as flaxcheckpoints
 
 from . import checkpoints
 from . import datasets
@@ -29,7 +30,6 @@ from . import unet
 from . import utils
 from absl import logging
 import flax
-import optax
 import jax
 import jax.numpy as jnp
 import ml_collections
@@ -39,7 +39,7 @@ import numpy as onp
 @flax.struct.dataclass
 class TrainState:
   step: int
-  optimizer: Union[optax.adam, None]
+  optimizer: Union[flax.optim.Optimizer, None]
   ema_params: Any
   num_sample_steps: int
 
@@ -105,7 +105,7 @@ class Model:
     # same buffer twice
     return TrainState(
         step=0,
-        optimizer=optimizer_def.init(init_params),
+        optimizer=optimizer_def.create(init_params),
         ema_params=utils.copy_pytree(init_params),
         num_sample_steps=self.config.model.train_num_steps)
 
@@ -115,7 +115,7 @@ class Model:
         self.make_init_state().replace(optimizer=None))
     if ckpt_path is None:
       ckpt_path = self.config.distillation.teacher_checkpoint_path
-    loaded_state = checkpoints.restore_from_path(ckpt_path, target=None)
+    loaded_state = flaxcheckpoints.restore_checkpoint(ckpt_path, target=None)
     teacher_params = loaded_state['ema_params']
     teacher_params = flax.core.unfreeze(teacher_params)
     teacher_params = jax.tree_map(
@@ -325,18 +325,18 @@ class Model:
       optimizer_kwargs['weight_decay'] = config.train.weight_decay
 
     if config.train.optimizer == 'adam':
-      optimizer_def = optax.adam(
-          learning_rate=config.train.get('learning_rate', 0.0001),
-          b1=config.train.get('adam_beta1', 0.9),
-          b2=config.train.get('adam_beta2', 0.999))
+      optimizer_def = flax.optim.Adam(
+          **optimizer_kwargs,
+          beta1=config.train.get('adam_beta1', 0.9),
+          beta2=config.train.get('adam_beta2', 0.999))
     elif config.train.optimizer == 'momentum':
-      optimizer_def = optax.sgd(
+      optimizer_def = flax.optim.Momentum(
           **optimizer_kwargs,
-          momentum=config.train.get('optimizer_beta', 0.9))
+          beta=config.train.get('optimizer_beta', 0.9))
     elif config.train.optimizer == 'nesterov':
-      optimizer_def = optax.sgd(
+      optimizer_def = flax.optim.Momentum(
           **optimizer_kwargs,
-          momentum=config.train.get('optimizer_beta', 0.9),
+          beta=config.train.get('optimizer_beta', 0.9),
           nesterov=True)
     else:
       raise NotImplementedError(f'Unknown optimizer: {config.train.optimizer}')
