@@ -64,9 +64,9 @@ def get_config():
       ),
       train=D(
           # optimizer
-          batch_size=128,
+          batch_size=512,
           optimizer='adam',
-          learning_rate=2e-4,
+          learning_rate=1e-4,
           learning_rate_warmup_steps=1000,
           weight_decay=0.001,
           ema_decay=0.,

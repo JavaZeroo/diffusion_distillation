@@ -14,26 +14,23 @@ from PIL import Image
 import diffusion_distillation
 from diffusion_distillation import utils
 import lmdb
-
+import io
 
 def save2db(traj_batch, env, curr):
-    '''
-    Input: 
-        traj: ndarray, (B, T, C, H, W)
-    '''
     num_traj = traj_batch.shape[0]
     with env.begin(write=True) as txn:
         for i in range(num_traj):
             key = f'{curr+i}'.encode()
-            txn.put(key, traj_batch[i])
+            buffer = io.BytesIO()
+            onp.save(buffer, traj_batch[i])
+            txn.put(key, buffer.getvalue())
     return curr + num_traj
 
 
 def load_teacher(args, config):
     # Create teacher model.
     teacher = diffusion_distillation.model.Model(config)
-    print(print(teacher.model))
-    teacher.load_teacher_state("/tmp/flax_ckpt/checkpoint/mnist_base_x")
+    teacher.load_teacher_state(args.ckpt_path)
 
     return teacher
 
@@ -75,7 +72,7 @@ def evaluate_teacher(args):
         logsnr_s = bc(logsnr_s, xt.shape)
         alpha_s = jnp.sqrt(nn.sigmoid(logsnr_s))
         sigma_s = jnp.sqrt(nn.sigmoid(-logsnr_s))
-        print(alpha_s.shape, xhat.shape, sigma_s.shape, epshat.shape)
+        # print(alpha_s.shape, xhat.shape, sigma_s.shape, epshat.shape)
         xt = alpha_s * xhat + sigma_s * epshat
         return xhat, xt
 
@@ -87,11 +84,11 @@ def evaluate_teacher(args):
         xt = z
         x_list = [xt]
         for i, timestep in enumerate(jnp.linspace(1., dt, num_steps)):
-            print(f"======================{i}======================")
+            # print(f"======================{i}======================")
             t = jnp.full(z.shape[:2], fill_value=timestep, dtype=jnp.float32)
             s = t - dt
-            print(type(xt), type(t), type(s))
-            print(xt.shape, t.shape, s.shape)
+            # print(type(xt), type(t), type(s))
+            # print(xt.shape, t.shape, s.shape)
             xhat, xt = ddim_step_fn_p(teacher_params, xt, y, t, s)
             if i in t_idx:
                 x_list.append(xhat)
@@ -118,6 +115,7 @@ def evaluate_teacher(args):
         step = num_steps // 16
         t_idx = [step * i - 1 for i in range(17)]
     for batch_idx in tqdm(range(num_batches)):
+        print(curr)
         y_key, z_key, gen_key, sample_key = jax.random.split(sample_key, 4)
         # y = sample_labels(
         #     y_key, num_classes=teacher.model.num_classes, num=B,
@@ -143,6 +141,8 @@ def evaluate_teacher(args):
         traj_batch = traj_batch.reshape(B, *traj_batch.shape[2:])
         traj_batch = traj_batch.transpose(0, 4, 1, 2, 3)  # B, C, T, H, W
         traj_batch = onp.ascontiguousarray(traj_batch)
+        if batch_idx==0:
+            print(traj_batch.shape) # B, C, T, H, W
         curr = save2db(traj_batch=traj_batch, env=env, curr=curr)
 
     with env.begin(write=True) as txn:
@@ -155,8 +155,8 @@ def evaluate_teacher(args):
 
 if __name__ == '__main__':
     parser = ArgumentParser(description='parser for DDIM sampler')
-    parser.add_argument('--db_path', type=str, default='data/cifar_origin')
-    parser.add_argument('--ckpt_path', type=str, default='ckpts/cifar_original')
+    parser.add_argument('--db_path', type=str, default='data/mnist_origin')
+    parser.add_argument('--ckpt_path', type=str, default='ckpts/mnist_original')
     parser.add_argument('--time', type=str, default='uniform')
     parser.add_argument('--num_steps', type=int, default=512)
     parser.add_argument('--num_imgs', type=int, default=10000)
