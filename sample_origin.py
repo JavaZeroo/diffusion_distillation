@@ -115,7 +115,6 @@ def evaluate_teacher(args):
         step = num_steps // 16
         t_idx = [step * i - 1 for i in range(17)]
     for batch_idx in tqdm(range(num_batches)):
-        print(curr)
         y_key, z_key, gen_key, sample_key = jax.random.split(sample_key, 4)
         # y = sample_labels(
         #     y_key, num_classes=teacher.model.num_classes, num=B,
