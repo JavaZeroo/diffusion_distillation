@@ -1,6 +1,6 @@
 #!/bin/bash
 
-source ~/.bashrc
+eval "$(conda shell.bash hook)"
 
 # env
 conda activate dd
