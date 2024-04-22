@@ -1,3 +1,5 @@
+#!/bin/bash
+
 # env
 conda activate dd
 
@@ -31,5 +33,16 @@ else
     fi
 fi
 
-# Sampling
-python sample_origin.py --num_imgs 1024 --batchsize 64 --startbatch 0 --db_path data/mnist_origin_debug --ckpt_path $latest_checkpoint
+# 创建临时文件
+tmp_output=$(mktemp)
+
+# 运行 Python 脚本并将输出重定向到终端和临时文件
+python sample_origin.py --num_imgs 1024 --batchsize 64 --startbatch 0 --db_path data/mnist_origin_debug --ckpt_path $latest_checkpoint | tee "$tmp_output"
+
+# 从临时文件中提取 db_path
+db_path=$(grep "Write" "$tmp_output" | awk -F ' ' '{print $5}')
+
+echo "db_path: $db_path"
+
+# 删除临时文件
+rm "$tmp_output"
