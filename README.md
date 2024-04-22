@@ -1,5 +1,14 @@
 # diffusion_distillation
 
+TL;DR: 
+
+Simply run
+```bash
+bash run.sh
+```
+
+---
+
 ## Env
 
 ```bash
@@ -15,6 +24,7 @@ conda env create -f dd.yml
 ## Sampling
 
 1. Adjusting sampling profiles: `diffusion_distillation/config/mnist_distill.py`
+2. Run the following code to generate images:
 ```bash
 python sample_origin.py --num_imgs 1024 --batchsize 64 --startbatch 0 --db_path data/mnist_origin_debug --ckpt_path /path/to/ckpt
 ```
